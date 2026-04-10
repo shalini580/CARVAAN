@@ -1,0 +1,137 @@
+#pragma once
+#include <iostream>
+#include <vector>
+#include <unordered_map>
+#include <string>
+#include <iomanip>
+using namespace std;
+
+enum class CongestionLevel { LOW, MEDIUM, HIGH, CRITICAL };
+
+struct Edge {
+    int from;
+    int to;
+    double distance;
+    int trafficDensity = 0;
+    double weight = 0;
+    bool isClosed = false;
+
+    // Signal state (per incoming edge)
+    bool isGreen = false;
+    int greenDuration = 0;
+
+    void recomputeWeight(double penalty = 0.5) {
+        weight = distance + (trafficDensity * penalty);
+    }
+};
+
+struct Node {
+    int id;
+    string name;
+    int vehicleCount = 0; // Sum of incoming traffic densities
+    CongestionLevel congestion = CongestionLevel::LOW;
+
+    void updateCongestion() {
+        if (vehicleCount < 5)       congestion = CongestionLevel::LOW;
+        else if (vehicleCount < 10) congestion = CongestionLevel::MEDIUM;
+        else if (vehicleCount < 20) congestion = CongestionLevel::HIGH;
+        else                        congestion = CongestionLevel::CRITICAL;
+    }
+
+    string congestionStr() const {
+        switch (congestion) {
+            case CongestionLevel::LOW:      return "LOW";
+            case CongestionLevel::MEDIUM:   return "MEDIUM";
+            case CongestionLevel::HIGH:     return "HIGH";
+            case CongestionLevel::CRITICAL: return "CRITICAL";
+        }
+        return "UNKNOWN";
+    }
+};
+
+class CityGraph {
+public:
+    unordered_map<int, Node> nodes;
+    unordered_map<int, vector<Edge>> adjList;
+
+    void addNode(int id, const string& name) {
+        nodes[id] = {id, name, 0, CongestionLevel::LOW};
+    }
+
+    void addEdge(int from, int to, double distance) {
+        Edge e;
+        e.from = from;
+        e.to = to;
+        e.distance = distance;
+        e.weight = distance;
+        adjList[from].push_back(e);
+    }
+
+    void addBiEdge(int from, int to, double distance) {
+        addEdge(from, to, distance);
+        addEdge(to, from, distance);
+    }
+
+    int nodeCount() const { return (int)nodes.size(); }
+
+    int edgeCount() const {
+        int cnt = 0;
+        for (auto& pair : adjList) {
+            cnt += (int)pair.second.size();
+        }
+        return cnt;
+    }
+
+    // Helper to get incoming edges to a node
+    vector<Edge*> getIncomingEdges(int nodeId) {
+        vector<Edge*> incoming;
+        for (auto& pair : adjList) {
+            for (auto& edge : pair.second) {
+                if (edge.to == nodeId) {
+                    incoming.push_back(&edge);
+                }
+            }
+        }
+        return incoming;
+    }
+
+    // Updates node vehicle count based on incoming edges
+    void updateNodeVehicleCounts() {
+        for (auto& pair : nodes) {
+            int id = pair.first;
+            int count = 0;
+            vector<Edge*> incoming = getIncomingEdges(id);
+            for (Edge* e : incoming) {
+                count += e->trafficDensity;
+            }
+            pair.second.vehicleCount = count;
+            pair.second.updateCongestion();
+        }
+    }
+};
+
+inline CityGraph buildSampleCity() {
+    CityGraph g;
+
+    g.addNode(0, "Hospital");
+    g.addNode(1, "Junction_A");
+    g.addNode(2, "Junction_B");
+    g.addNode(3, "Junction_C");
+    g.addNode(4, "Junction_D");
+    g.addNode(5, "Junction_E");
+    g.addNode(6, "Junction_F");
+    g.addNode(7, "FireStation");
+
+    g.addBiEdge(0, 1, 2.0);
+    g.addBiEdge(0, 2, 3.5);
+    g.addBiEdge(1, 3, 1.5);
+    g.addBiEdge(1, 4, 4.0);
+    g.addBiEdge(2, 3, 2.0);
+    g.addBiEdge(2, 5, 3.0);
+    g.addBiEdge(3, 6, 2.5);
+    g.addBiEdge(4, 7, 1.0);
+    g.addBiEdge(5, 6, 1.5);
+    g.addBiEdge(6, 7, 2.0);
+
+    return g;
+}
