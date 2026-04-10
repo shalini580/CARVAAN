@@ -1,0 +1,67 @@
+#pragma once
+#include "city_graph.h"
+#include <vector>
+#include <cmath>
+
+using namespace std;
+
+struct WeightUpdateLog {
+    int    tick;
+    int    fromNode;
+    int    toNode;
+    double oldWeight;
+    double newWeight;
+    int    trafficDensity;
+};
+
+class DynamicWeightManager {
+public:
+    CityGraph& city;
+    double basePenalty  = 0.5;
+    double criticalMult = 2.0;
+    vector<WeightUpdateLog> log;
+    int tickCount = 0;
+
+    explicit DynamicWeightManager(CityGraph& g) : city(g) {}
+
+    void update() {
+        tickCount++;
+        for (auto& pair : city.adjList) {
+            int fromId = pair.first;
+            auto& edges = pair.second;
+
+            CongestionLevel fromCong = city.nodes[fromId].congestion;
+            double multiplier = (fromCong == CongestionLevel::CRITICAL) ? criticalMult : 1.0;
+
+            for (auto& edge : edges) {
+                double oldW = edge.weight;
+                double penalty = basePenalty * multiplier;
+                edge.recomputeWeight(penalty);
+
+                if (abs(edge.weight - oldW) > 0.01) {
+                    log.push_back({tickCount, fromId, edge.to, oldW, edge.weight, edge.trafficDensity});
+                }
+            }
+        }
+    }
+
+    void simulateAccident(int fromNode, int toNode, int addedDensity) {
+        for (auto& edge : city.adjList[fromNode]) {
+            if (edge.to == toNode) {
+                edge.trafficDensity += addedDensity;
+                city.updateNodeVehicleCounts();
+                break;
+            }
+        }
+    }
+    
+    void resetWeights() {
+        for (auto& pair : city.adjList) {
+            for (auto& edge : pair.second) {
+                edge.trafficDensity = 0;
+                edge.weight = edge.distance;
+            }
+        }
+        city.updateNodeVehicleCounts();
+    }
+};
